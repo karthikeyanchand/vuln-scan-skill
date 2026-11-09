@@ -7,8 +7,8 @@ Part of a three-repo workshop:
 | Repo | What it is |
 |---|---|
 | **vuln-scan-skill** (this repo) | The skill: instructions, scripts, Semgrep rules, setup |
-| [vulnlab-apps](https://github.com/OWNER/vulnlab-apps) | Deliberately vulnerable Python and JS apps with an answer key |
-| [vuln-scan-workshop](https://github.com/OWNER/vuln-scan-workshop) | Notebook that walks through each stage and scores the results |
+| [vulnlab-apps](https://github.com/karthikeyanchand/vulnlab-apps) | Deliberately vulnerable Python and JS apps with an answer key |
+| [vuln-scan-workshop](https://github.com/karthikeyanchand/vuln-scan-workshop) | Notebook that walks through each stage and scores the results |
 
 ## How it finds vulnerabilities
 
@@ -50,7 +50,7 @@ Two design choices worth calling out in the workshop:
 **1. Tools** (Apple Silicon Mac):
 
 ```bash
-git clone https://github.com/OWNER/vuln-scan-skill.git
+git clone https://github.com/karthikeyanchand/vuln-scan-skill.git
 cd vuln-scan-skill
 ./setup/setup_mac.sh            # semgrep, gitleaks, pip-audit, Antares CLI, MLX
 ./setup/setup_mac.sh --model    # + download and convert Antares-1B (needs approved access)
@@ -71,7 +71,7 @@ Antares weights are **gated**. Request access on the [Hugging Face model card](h
 # for every project:
 mkdir -p ~/.agents/skills && cp -R .agents/skills/vuln-scan ~/.agents/skills/
 # or with the skills CLI:
-npx skills add OWNER/vuln-scan-skill --agent codex
+npx skills add karthikeyanchand/vuln-scan-skill --agent codex
 ```
 
 ## Use

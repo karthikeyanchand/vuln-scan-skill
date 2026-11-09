@@ -1,0 +1,21 @@
+
+# Antares CLI profile for a local MLX server on Apple Silicon.
+# Appended to ~/.antares/profiles.toml by setup_mac.sh.
+#
+# mlx_lm.server answers to the model path it was started with, so `model`
+# must be the same absolute path you pass to serve_antares_mlx.sh.
+[profiles.local-mlx]
+display_name = "Antares-1B (local MLX)"
+model = "__MODEL_DIR__"
+backend = "remote"
+endpoint = "http://127.0.0.1:8000/v1/completions"
+context_window = 16384
+remote_timeout_seconds = 300
+
+[profiles.local-mlx.generation]
+max_tokens = 4096
+temperature = 0.3
+top_p = 1.0
+frequency_penalty = 0.3
+stop_tokens = ["<|end_of_text|>", "<|start_of_role|>"]
+use_completions_api = true

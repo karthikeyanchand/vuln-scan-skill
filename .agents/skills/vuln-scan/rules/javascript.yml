@@ -1,0 +1,135 @@
+# Workshop Semgrep rules for Node/Express apps.
+# Deliberately incomplete: there is no prototype-pollution rule, to show in the
+# workshop that a rule-based scanner only finds what someone wrote a rule for.
+rules:
+  - id: js-sql-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Untrusted request data is built into a SQL statement. Use bound parameters.
+    metadata: { cwe: ["CWE-89"], owasp: ["A03:2021"], category: security }
+    pattern-sources: &express_sources
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.cookies
+      - pattern: req.headers
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.prepare($Q)
+              - pattern: $DB.query($Q, ...)
+              - pattern: $DB.exec($Q)
+              - pattern: $DB.run($Q, ...)
+          - focus-metavariable: $Q
+
+  - id: js-command-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Untrusted data reaches child_process.exec, which runs a shell.
+    metadata: { cwe: ["CWE-78"], owasp: ["A03:2021"], category: security }
+    pattern-sources: *express_sources
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: exec($CMD, ...)
+              - pattern: execSync($CMD, ...)
+              - pattern: $CP.exec($CMD, ...)
+              - pattern: $CP.execSync($CMD, ...)
+          - focus-metavariable: $CMD
+
+  - id: js-path-traversal
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Untrusted data is used in a filesystem path that is read or served.
+    metadata: { cwe: ["CWE-22"], owasp: ["A01:2021"], category: security }
+    pattern-sources: *express_sources
+    pattern-sanitizers:
+      - pattern: path.basename(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.sendFile($P, ...)
+              - pattern: fs.readFile($P, ...)
+              - pattern: fs.readFileSync($P, ...)
+              - pattern: fs.createReadStream($P, ...)
+          - focus-metavariable: $P
+
+  - id: js-reflected-xss
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Untrusted data is written into an HTML response without escaping.
+    metadata: { cwe: ["CWE-79"], owasp: ["A03:2021"], category: security }
+    pattern-sources: *express_sources
+    pattern-sanitizers:
+      - pattern: _.escape(...)
+      - pattern: escapeHtml(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.send($X)
+              - pattern: $RES.write($X)
+          - focus-metavariable: $X
+
+  - id: js-ssrf
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Untrusted data controls the URL of a server-side HTTP request.
+    metadata: { cwe: ["CWE-918"], owasp: ["A10:2021"], category: security }
+    pattern-sources: *express_sources
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($URL, ...)
+              - pattern: axios.$M($URL, ...)
+              - pattern: http.get($URL, ...)
+              - pattern: https.get($URL, ...)
+          - focus-metavariable: $URL
+
+  - id: js-code-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Untrusted data is evaluated as code.
+    metadata: { cwe: ["CWE-95"], owasp: ["A03:2021"], category: security }
+    pattern-sources: *express_sources
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($X)
+              - pattern: new Function(..., $X)
+              - pattern: vm.runInNewContext($X, ...)
+          - focus-metavariable: $X
+
+  - id: js-open-redirect
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Untrusted data controls a redirect target.
+    metadata: { cwe: ["CWE-601"], owasp: ["A01:2021"], category: security }
+    pattern-sources: *express_sources
+    pattern-sinks:
+      - patterns:
+          - pattern: $RES.redirect($URL)
+          - focus-metavariable: $URL
+
+  - id: js-hardcoded-secret
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A secret-looking value is hardcoded in source. Load it from the environment.
+    metadata: { cwe: ["CWE-798"], owasp: ["A07:2021"], category: security }
+    patterns:
+      - pattern-either:
+          - pattern: |
+              { ..., $KEY: "$VALUE", ... }
+          - pattern: const $KEY = "$VALUE"
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(secret|token|passw|api_?key|private_?key).*
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: .{12,}

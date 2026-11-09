@@ -1,0 +1,130 @@
+# Workshop Semgrep rules for Python web apps.
+# Taint rules follow untrusted input (sources) to dangerous calls (sinks).
+# Run offline with: semgrep scan --config rules/ <target>
+rules:
+  - id: py-sql-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Untrusted request data reaches a SQL execute() call. Use bound parameters.
+    metadata: { cwe: ["CWE-89"], owasp: ["A03:2021"], category: security }
+    pattern-sources: &flask_sources
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.values.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: request.headers.get(...)
+      - pattern: request.get_json(...)
+      - pattern: request.json
+      - pattern: request.files[...]
+    pattern-sinks:
+      - patterns:
+          - pattern: $CONN.execute($QUERY, ...)
+          - focus-metavariable: $QUERY
+
+  - id: py-command-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Untrusted data reaches a subprocess call with shell=True.
+    metadata: { cwe: ["CWE-78"], owasp: ["A03:2021"], category: security }
+    pattern-sources: *flask_sources
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: subprocess.$FN($CMD, ..., shell=True, ...)
+              - pattern: os.system($CMD)
+              - pattern: os.popen($CMD, ...)
+          - focus-metavariable: $CMD
+
+  - id: py-path-traversal
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Untrusted data is used to build a filesystem path that is then read or served.
+    metadata: { cwe: ["CWE-22"], owasp: ["A01:2021"], category: security }
+    pattern-sources: *flask_sources
+    pattern-sanitizers:
+      - pattern: secure_filename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: send_file($P, ...)
+              - pattern: open($P, ...)
+              - pattern: $F.save($P, ...)
+          - focus-metavariable: $P
+
+  - id: py-ssrf
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Untrusted data controls the URL of a server-side HTTP request.
+    metadata: { cwe: ["CWE-918"], owasp: ["A10:2021"], category: security }
+    pattern-sources: *flask_sources
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$M($URL, ...)
+              - pattern: urllib.request.urlopen($URL, ...)
+              - pattern: httpx.$M($URL, ...)
+          - focus-metavariable: $URL
+
+  - id: py-insecure-deserialization
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Untrusted data is deserialized with pickle, which can execute code.
+    metadata: { cwe: ["CWE-502"], owasp: ["A08:2021"], category: security }
+    pattern-sources: *flask_sources
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: pickle.loads($D)
+              - pattern: pickle.load($D)
+              - pattern: yaml.load($D, ...)
+          - focus-metavariable: $D
+
+  - id: py-template-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Untrusted data becomes part of a Jinja template's source (SSTI).
+    metadata: { cwe: ["CWE-1336"], owasp: ["A03:2021"], category: security }
+    pattern-sources: *flask_sources
+    pattern-sinks:
+      - patterns:
+          - pattern: render_template_string($T, ...)
+          - focus-metavariable: $T
+
+  - id: py-weak-password-hash
+    languages: [python]
+    severity: WARNING
+    message: MD5/SHA1 is too fast for password storage. Use argon2, bcrypt or scrypt.
+    metadata: { cwe: ["CWE-328"], owasp: ["A02:2021"], category: security }
+    pattern-either:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.sha1(...)
+
+  - id: py-flask-debug
+    languages: [python]
+    severity: WARNING
+    message: Flask debug mode exposes the Werkzeug interactive debugger.
+    metadata: { cwe: ["CWE-489"], owasp: ["A05:2021"], category: security }
+    pattern: $APP.run(..., debug=True, ...)
+
+  - id: py-hardcoded-secret
+    languages: [python]
+    severity: WARNING
+    message: A secret-looking value is hardcoded in source. Load it from the environment.
+    metadata: { cwe: ["CWE-798"], owasp: ["A07:2021"], category: security }
+    patterns:
+      - pattern: $NAME = "$VALUE"
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i).*(secret|token|passw|api_?key|private_?key).*
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: .{12,}
